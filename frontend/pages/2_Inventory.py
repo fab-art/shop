@@ -1,91 +1,99 @@
 import streamlit as st
 import requests
+import os
+import pandas as pd
+from supabase import create_client
 
-# Page configuration
-st.set_page_config(
-    page_title="Inventory - Curtain Shop",
-    page_icon="📦",
-    layout="wide"
-)
+st.set_page_config(page_title="Inventory", page_icon="📦", layout="wide")
 
-# API URL from secrets
-API_URL = st.secrets.get("API_URL", "http://localhost:8000")
+@st.cache_resource
+def get_sb():
+    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 
-# Helper functions
-def fetch_from_api(endpoint):
-    try:
-        response = requests.get(f"{API_URL}{endpoint}", timeout=10)
-        if response.status_code == 200:
-            return response.json()
-        return None
-    except Exception as e:
-        st.error(f"API Error: {e}")
-        return None
+API_URL = os.environ.get("API_URL", "http://localhost:8000")
+sb = get_sb()
 
-def post_to_api(endpoint, data):
-    try:
-        response = requests.post(f"{API_URL}{endpoint}", json=data, timeout=10)
-        if response.status_code in [200, 201]:
-            return response.json()
-        st.error(f"API Error: {response.text}")
-        return None
-    except Exception as e:
-        st.error(f"API Error: {e}")
-        return None
+st.title("📦 Inventory & Inwarding")
 
-st.title("📦 Inventory Management")
+# --- KPI Cards ---
+inv = sb.table("current_inventory").select("*").execute().data
+df = pd.DataFrame(inv) if inv else pd.DataFrame()
 
-tab1, tab2, tab3 = st.tabs(["Current Stock", "Receive Purchase Order", "Adjust Stock"])
+if not df.empty:
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Items", len(df))
+    low = df[df["stock_on_hand"] < 5]
+    col2.metric("Low Stock Warnings", len(low), delta=f"-{len(low)}" if len(low) else None, delta_color="inverse")
+    total_val = (df["stock_on_hand"] * df["current_landed_cost"]).sum()
+    col3.metric("Inventory Value", f"{total_val:,.2f}")
 
-with tab1:
-    st.subheader("Current Inventory Levels")
-    
-    inventory = fetch_from_api("/inventory")
-    if inventory:
-        st.dataframe(inventory, use_container_width=True)
-    else:
-        st.info("No inventory data available")
+    st.divider()
+    search = st.text_input("🔍 Search items")
+    display = df if not search else df[df["name"].str.contains(search, case=False)]
+    st.dataframe(
+        display[["name", "type", "uom", "stock_on_hand", "current_landed_cost", "default_sell_price"]],
+        use_container_width=True, hide_index=True
+    )
+else:
+    st.info("No inventory yet.")
 
-with tab2:
-    st.subheader("Receive Purchase Order")
-    
-    pos = fetch_from_api("/purchase-orders?status_filter=pending")
-    if pos:
-        po_options = {f"{po['order_number']} - {po['suppliers']['name']}": po['id'] for po in pos}
-        selected_po = st.selectbox("Select Purchase Order", list(po_options.keys()))
-        
-        if selected_po and st.button("Receive Order"):
-            po_id = po_options[selected_po]
-            result = post_to_api(f"/purchase-orders/{po_id}/receive", {})
-            if result:
-                st.success("Purchase order received successfully!")
-                st.rerun()
-    else:
-        st.info("No pending purchase orders")
+st.divider()
+st.subheader("📥 Receive Stock")
 
-with tab3:
-    st.subheader("Manual Stock Adjustment")
-    
-    products = fetch_from_api("/products") or []
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        product_id = st.selectbox(
-            "Product",
-            options=[p['id'] for p in products],
-            format_func=lambda x: next((p['name'] for p in products if p['id'] == x), "Select Product")
-        )
-    with col2:
-        adjustment_qty = st.number_input("Adjustment Quantity (+/-)", value=0.0)
-    
-    notes = st.text_area("Notes (optional)")
-    
-    if st.button("Submit Adjustment"):
-        data = {
-            "product_id": product_id,
-            "quantity": adjustment_qty,
-            "notes": notes
-        }
-        result = post_to_api("/inventory/adjust", data)
-        if result:
-            st.success("Inventory adjusted successfully!")
+# Suppliers
+suppliers = sb.table("suppliers").select("supplier_id,name").execute().data
+supplier_map = {s["name"]: s["supplier_id"] for s in suppliers}
+
+with st.expander("➕ Add New Supplier"):
+    new_sup = st.text_input("Supplier Name")
+    new_sup_phone = st.text_input("Phone")
+    if st.button("Save Supplier"):
+        sb.table("suppliers").insert({"name": new_sup, "phone": new_sup_phone}).execute()
+        st.success("Supplier added!")
+        st.rerun()
+
+mode = st.radio("Item", ["Existing Item", "New Item"], horizontal=True)
+
+if mode == "Existing Item" and not df.empty:
+    item_label = st.selectbox("Select Item", df["name"].tolist())
+    item_id = df[df["name"] == item_label]["item_id"].values[0]
+    item_name = None
+    item_type = item_uom = None
+else:
+    item_id = None
+    item_name = st.text_input("Item Name")
+    item_type = st.selectbox("Type", ["Material", "Product", "Service"])
+    item_uom = st.selectbox("Unit of Measure", ["Meters", "Pieces", "Flat Rate"])
+
+col1, col2 = st.columns(2)
+with col1:
+    qty = st.number_input("Quantity Received", min_value=0.01, value=1.0, step=0.5)
+    purchase_price = st.number_input("Total Purchase Price", min_value=0.0, value=0.0)
+with col2:
+    freight = st.number_input("Freight / Transport Cost", min_value=0.0, value=0.0)
+    pay_status = st.selectbox("Payment Status", ["On Credit", "Paid"])
+    supplier_name = st.selectbox("Supplier", list(supplier_map.keys()) if supplier_map else ["—"])
+
+lc = (purchase_price + freight) / qty if qty > 0 else 0
+st.info(f"Landed Cost per unit: **{lc:,.2f}**")
+
+if st.button("✅ Receive Stock", type="primary"):
+    payload = {
+        "item_id": item_id,
+        "item_name": item_name,
+        "item_type": item_type or "Material",
+        "item_uom": item_uom or "Pieces",
+        "supplier_id": supplier_map.get(supplier_name),
+        "quantity": qty,
+        "purchase_price": purchase_price,
+        "freight_cost": freight,
+        "status": pay_status
+    }
+    with st.spinner("Saving..."):
+        try:
+            r = requests.post(f"{API_URL}/api/inventory/inward", json=payload, timeout=90)
+            r.raise_for_status()
+            st.success("Stock received and landed cost updated!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
