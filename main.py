@@ -85,49 +85,60 @@ def checkout(payload: CheckoutPayload):
 # --- Inward Stock ---
 @app.post("/api/inventory/inward")
 def inward(payload: InwardPayload):
-    item_id = payload.item_id
-    landed_cost_per_unit = (payload.purchase_price + payload.freight_cost) / payload.quantity
+    try:
+        landed_cost_per_unit = (payload.purchase_price + payload.freight_cost) / payload.quantity
+        item_id = payload.item_id
 
-    # Create item if new
-    if not item_id:
-        res = sb.table("catalog").insert({
-            "name": payload.item_name,
-            "type": payload.item_type,
-            "uom": payload.item_uom,
-            "current_landed_cost": landed_cost_per_unit,
-            "default_sell_price": landed_cost_per_unit * 1.3
-        }).execute()
-        item_id = res.data[0]["item_id"]
-    else:
-        # Moving average landed cost
-        inv = sb.table("current_inventory").select("stock_on_hand,current_landed_cost").eq("item_id", item_id).execute()
-        if inv.data:
-            old_qty = inv.data[0]["stock_on_hand"]
-            old_cost = inv.data[0]["current_landed_cost"]
-            new_avg = ((old_qty * old_cost) + (payload.quantity * landed_cost_per_unit)) / (old_qty + payload.quantity)
+        if not item_id:
+            # New item
+            res = sb.table("catalog").insert({
+                "name": payload.item_name,
+                "type": payload.item_type,
+                "uom": payload.item_uom,
+                "current_landed_cost": round(landed_cost_per_unit, 2),
+                "default_sell_price": round(landed_cost_per_unit * 1.3, 2)
+            }).execute()
+            item_id = res.data[0]["item_id"]
         else:
-            new_avg = landed_cost_per_unit
-        sb.table("catalog").update({"current_landed_cost": round(new_avg, 2)}).eq("item_id", item_id).execute()
+            # Compute moving average from ledger directly (avoid view query issues)
+            cat = sb.table("catalog").select("current_landed_cost").eq("item_id", item_id).execute()
+            ledger = sb.table("inventory_ledger").select("quantity_change").eq("item_id", item_id).execute()
 
-    # Ledger entry
-    sb.table("inventory_ledger").insert({
-        "item_id": item_id,
-        "transaction_type": "INWARD",
-        "quantity_change": payload.quantity,
-        "unit_cost": landed_cost_per_unit
-    }).execute()
+            old_qty = sum(r["quantity_change"] for r in ledger.data) if ledger.data else 0
+            old_cost = cat.data[0]["current_landed_cost"] if cat.data else 0
 
-    # Purchase invoice
-    sb.table("purchase_invoices").insert({
-        "supplier_id": payload.supplier_id,
-        "item_id": item_id,
-        "quantity": payload.quantity,
-        "purchase_price": payload.purchase_price,
-        "freight_cost": payload.freight_cost,
-        "status": payload.status
-    }).execute()
+            if old_qty + payload.quantity > 0:
+                new_avg = ((old_qty * old_cost) + (payload.quantity * landed_cost_per_unit)) / (old_qty + payload.quantity)
+            else:
+                new_avg = landed_cost_per_unit
 
-    return {"item_id": item_id, "landed_cost_per_unit": round(landed_cost_per_unit, 2)}
+            sb.table("catalog").update({"current_landed_cost": round(new_avg, 2)}).eq("item_id", item_id).execute()
+
+        # Ledger entry
+        sb.table("inventory_ledger").insert({
+            "item_id": item_id,
+            "transaction_type": "INWARD",
+            "quantity_change": payload.quantity,
+            "unit_cost": round(landed_cost_per_unit, 2)
+        }).execute()
+
+        # Purchase invoice — only include supplier_id if provided
+        invoice_data = {
+            "item_id": item_id,
+            "quantity": payload.quantity,
+            "purchase_price": payload.purchase_price,
+            "freight_cost": payload.freight_cost,
+            "status": payload.status
+        }
+        if payload.supplier_id:
+            invoice_data["supplier_id"] = payload.supplier_id
+
+        sb.table("purchase_invoices").insert(invoice_data).execute()
+
+        return {"item_id": item_id, "landed_cost_per_unit": round(landed_cost_per_unit, 2)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- Expense Logger ---
