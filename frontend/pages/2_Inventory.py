@@ -15,8 +15,18 @@ sb = get_sb()
 
 st.title("📦 Inventory & Inwarding")
 
-# --- KPI Cards ---
-inv = sb.table("current_inventory").select("*").execute().data
+# Build inventory from catalog + ledger (view not exposed via Supabase REST API)
+def load_inventory():
+    catalog_rows = sb.table("catalog").select("item_id,name,type,uom,current_landed_cost,default_sell_price").execute().data
+    ledger_rows = sb.table("inventory_ledger").select("item_id,quantity_change").execute().data
+    totals = {}
+    for r in ledger_rows:
+        totals[r["item_id"]] = totals.get(r["item_id"], 0) + r["quantity_change"]
+    for c in catalog_rows:
+        c["stock_on_hand"] = round(totals.get(c["item_id"], 0), 3)
+    return catalog_rows
+
+inv = load_inventory()
 df = pd.DataFrame(inv) if inv else pd.DataFrame()
 
 if not df.empty:
@@ -26,21 +36,16 @@ if not df.empty:
     col2.metric("Low Stock Warnings", len(low), delta=f"-{len(low)}" if len(low) else None, delta_color="inverse")
     total_val = (df["stock_on_hand"] * df["current_landed_cost"]).sum()
     col3.metric("Inventory Value", f"{total_val:,.2f}")
-
     st.divider()
     search = st.text_input("🔍 Search items")
     display = df if not search else df[df["name"].str.contains(search, case=False)]
-    st.dataframe(
-        display[["name", "type", "uom", "stock_on_hand", "current_landed_cost", "default_sell_price"]],
-        use_container_width=True, hide_index=True
-    )
+    st.dataframe(display[["name","type","uom","stock_on_hand","current_landed_cost","default_sell_price"]], use_container_width=True, hide_index=True)
 else:
     st.info("No inventory yet.")
 
 st.divider()
 st.subheader("📥 Receive Stock")
 
-# Suppliers
 suppliers = sb.table("suppliers").select("supplier_id,name").execute().data
 supplier_map = {s["name"]: s["supplier_id"] for s in suppliers}
 
@@ -57,8 +62,7 @@ mode = st.radio("Item", ["Existing Item", "New Item"], horizontal=True)
 if mode == "Existing Item" and not df.empty:
     item_label = st.selectbox("Select Item", df["name"].tolist())
     item_id = df[df["name"] == item_label]["item_id"].values[0]
-    item_name = None
-    item_type = item_uom = None
+    item_name = item_type = item_uom = None
 else:
     item_id = None
     item_name = st.text_input("Item Name")
@@ -89,7 +93,7 @@ if st.button("✅ Receive Stock", type="primary"):
         "freight_cost": freight,
         "status": pay_status
     }
-    with st.spinner("Saving..."):
+    with st.spinner("Saving... (may take ~30s on cold start)"):
         try:
             r = requests.post(f"{API_URL}/api/inventory/inward", json=payload, timeout=90)
             r.raise_for_status()
