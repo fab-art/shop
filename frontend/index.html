@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duka — Shop ERP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#0c0b09;--surface:#141210;--surface2:#1c1916;--surface3:#232018;--gold:#c8922a;--gold-dim:rgba(200,146,42,0.12);--gold-border:rgba(200,146,42,0.22);--cream:#f0ead8;--cream-dim:#9a8f7a;--cream-faint:#5a5247;--danger:#c0402a;--success:#4a8c5c;--border:rgba(240,234,216,0.07);--border-h:rgba(240,234,216,0.13);--r:4px;--rl:8px;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:14px;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--cream);min-height:100vh;display:flex;}
+.sidebar{width:220px;min-height:100vh;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:10;}
+.sb-brand{padding:28px 24px 20px;border-bottom:1px solid var(--border);}
+.brand-name{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;letter-spacing:.08em;color:var(--gold);}
+.brand-sub{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--cream-faint);margin-top:2px;}
+.nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:2px;}
+.ni{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);cursor:pointer;color:var(--cream-dim);font-size:13px;transition:all .15s;border:1px solid transparent;}
+.ni:hover{background:var(--surface2);color:var(--cream);}
+.ni.active{background:var(--gold-dim);border-color:var(--gold-border);color:var(--gold);}
+.ni-icon{font-size:14px;width:16px;text-align:center;}
+.sb-footer{padding:16px 24px;border-top:1px solid var(--border);font-size:11px;color:var(--cream-faint);font-family:'DM Mono',monospace;}
+.main{margin-left:220px;flex:1;min-height:100vh;display:flex;flex-direction:column;}
+.topbar{padding:18px 32px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:5;}
+.page-title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:500;letter-spacing:.03em;}
+.topbar-meta{font-family:'DM Mono',monospace;font-size:11px;color:var(--cream-faint);letter-spacing:.06em;}
+.content{padding:28px 32px;flex:1;}
+.page{display:none;}.page.active{display:block;}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:24px;}
+.metric{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;}
+.metric-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cream-faint);margin-bottom:6px;}
+.metric-value{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;line-height:1;}
+.mv-gold{color:var(--gold);}.mv-danger{color:var(--danger);}.mv-success{color:var(--success);}
+.metric-sub{font-size:11px;color:var(--cream-faint);margin-top:4px;font-family:'DM Mono',monospace;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.full-col{grid-column:1/-1;}
+.panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;margin-bottom:20px;}
+.panel-last{margin-bottom:0;}
+.ph{padding:13px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.pt{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cream-dim);font-weight:500;}
+.pb{padding:20px;}
+label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream-faint);margin-bottom:5px;margin-top:13px;}
+label:first-child{margin-top:0;}
+input,select,textarea{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:var(--r);color:var(--cream);font-family:'DM Sans',sans-serif;font-size:13px;padding:8px 12px;outline:none;transition:border-color .15s;-webkit-appearance:none;}
+input:focus,select:focus{border-color:var(--gold-border);}
+select{cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5247'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:28px;}
+option{background:#1c1916;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;cursor:pointer;border:1px solid;transition:all .15s;}
+.btn-primary{background:var(--gold);border-color:var(--gold);color:#0c0b09;}
+.btn-primary:hover{background:#d9a03a;border-color:#d9a03a;}
+.btn-ghost{background:transparent;border-color:var(--border-h);color:var(--cream-dim);}
+.btn-ghost:hover{border-color:var(--cream-faint);color:var(--cream);}
+.btn-danger{background:transparent;border-color:rgba(192,64,42,.35);color:var(--danger);}
+.btn-danger:hover{background:rgba(192,64,42,.1);}
+.btn-sm{padding:4px 10px;font-size:10px;}
+.btn-full{width:100%;justify-content:center;margin-top:14px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream-faint);padding:10px 14px;border-bottom:1px solid var(--border);font-weight:500;}
+td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--cream-dim);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);color:var(--cream);}
+.mono{font-family:'DM Mono',monospace;font-size:12px;}
+.text-gold{color:var(--gold);}.text-danger{color:var(--danger);}.text-success{color:var(--success);}.text-muted{color:var(--cream-faint);}
+.row{display:flex;gap:10px;align-items:flex-end;}.row>*{flex:1;}
+.cart-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.cart-line:last-child{border-bottom:none;}
+.cart-total{padding:14px 0 6px;display:flex;align-items:baseline;justify-content:space-between;}
+.ct-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream-faint);}
+.ct-value{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:500;color:var(--gold);}
+.badge{display:inline-block;padding:2px 7px;border-radius:2px;font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:500;}
+.b-pend{background:rgba(200,146,42,.1);color:var(--gold);border:1px solid var(--gold-border);}
+.b-credit{background:rgba(192,64,42,.1);color:var(--danger);border:1px solid rgba(192,64,42,.25);}
+.b-paid{background:rgba(74,140,92,.1);color:var(--success);border:1px solid rgba(74,140,92,.25);}
+.b-type{background:rgba(240,234,216,.06);color:var(--cream-dim);border:1px solid var(--border);}
+.divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.sw{position:relative;margin-bottom:14px;}
+.sw input{padding-left:30px;}
+.si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--cream-faint);font-size:13px;pointer-events:none;}
+#toast{position:fixed;bottom:24px;right:24px;z-index:100;background:var(--surface2);border:1px solid var(--border);padding:11px 16px;border-radius:var(--rl);font-size:13px;color:var(--cream);transform:translateY(60px);opacity:0;transition:all .22s ease;max-width:280px;}
+#toast.show{transform:translateY(0);opacity:1;}
+#toast.success{border-color:rgba(74,140,92,.4);}
+#toast.error{border-color:rgba(192,64,42,.4);}
+.empty{text-align:center;padding:40px 20px;color:var(--cream-faint);}
+.et{font-family:'Cormorant Garamond',serif;font-size:19px;color:var(--cream-dim);margin-bottom:5px;}
+.loading{text-align:center;padding:36px;color:var(--cream-faint);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;}
+.cfg-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;flex:1;}
+.cfg-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rl);padding:40px;width:420px;}
+.cfg-logo{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;color:var(--gold);letter-spacing:.1em;margin-bottom:4px;}
+.cfg-tag{color:var(--cream-faint);font-size:10px;letter-spacing:.15em;text-transform:uppercase;margin-bottom:28px;}
+.lc-display{background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:var(--r);padding:10px 14px;margin-top:13px;display:flex;justify-content:space-between;align-items:center;}
+.lc-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream-faint);}
+</style>
+</head>
+<body>
+
+<div id="cfg" class="cfg-wrap">
+  <div class="cfg-box">
+    <div class="cfg-logo">Duka</div>
+    <div class="cfg-tag">Shop Management System</div>
+    <label>Supabase URL</label>
+    <input id="cfg-url" type="text" placeholder="https://xxxx.supabase.co">
+    <label>Supabase Anon Key</label>
+    <input id="cfg-key" type="password" placeholder="eyJh...">
+    <button class="btn btn-primary btn-full" onclick="saveConfig()">Connect to Database</button>
+    <div style="margin-top:12px;font-size:11px;color:var(--cream-faint);text-align:center;">Credentials are stored locally in your browser</div>
+  </div>
+</div>
+
+<div id="app" style="display:none;flex:1;">
+  <nav class="sidebar">
+    <div class="sb-brand">
+      <div class="brand-name">Duka</div>
+      <div class="brand-sub">Shop Management</div>
+    </div>
+    <div class="nav">
+      <div class="ni active" onclick="nav('pos')"><span class="ni-icon">◈</span>Point of Sale</div>
+      <div class="ni" onclick="nav('inventory')"><span class="ni-icon">◫</span>Inventory</div>
+      <div class="ni" onclick="nav('finance')"><span class="ni-icon">◉</span>Finance</div>
+      <div class="ni" onclick="nav('orders')"><span class="ni-icon">◎</span>Orders</div>
+    </div>
+    <div class="sb-footer" onclick="localStorage.clear();location.reload();" style="cursor:pointer;" title="Click to disconnect">● Connected</div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title" id="page-title">Point of Sale</div>
+      <div class="topbar-meta" id="topbar-date"></div>
+    </div>
+    <div class="content">
+
+      <!-- POS -->
+      <div class="page active" id="page-pos">
+        <div class="two-col">
+          <div>
+            <div class="panel">
+              <div class="ph"><span class="pt">Add Item</span></div>
+              <div class="pb">
+                <label>Item</label>
+                <select id="pos-item" onchange="posItemChange()"><option>Loading...</option></select>
+                <div class="row">
+                  <div><label>Quantity</label><input type="number" id="pos-qty" value="1" min="0.01" step="0.5"></div>
+                  <div><label>Unit Price</label><input type="number" id="pos-price" value="0" min="0" step="0.01"></div>
+                </div>
+                <button class="btn btn-ghost btn-full" onclick="addToCart()">+ Add to Cart</button>
+              </div>
+            </div>
+            <div class="panel panel-last">
+              <div class="ph"><span class="pt">Customer</span></div>
+              <div class="pb">
+                <label>Name</label><input type="text" id="pos-cname" placeholder="Customer name">
+                <label>Phone</label><input type="text" id="pos-cphone" placeholder="+250 ...">
+                <label>Upfront Deposit</label><input type="number" id="pos-deposit" value="0" min="0" oninput="renderCart()">
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="panel panel-last" style="min-height:400px;">
+              <div class="ph"><span class="pt">Cart</span><button class="btn btn-ghost btn-sm" onclick="clearCart()">Clear</button></div>
+              <div class="pb">
+                <div id="cart-lines"></div>
+                <div id="cart-summary" style="display:none;">
+                  <div class="cart-total"><span class="ct-label">Total</span><span class="ct-value" id="cart-total">0.00</span></div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--cream-faint);font-family:DM Mono,monospace;padding-bottom:16px;"><span>Balance due</span><span id="cart-balance">0.00</span></div>
+                  <button class="btn btn-primary btn-full" onclick="submitOrder()">Place Order</button>
+                </div>
+                <div id="cart-empty" class="empty"><div class="et">Cart is empty</div><div style="font-size:12px;">Add items from the left panel</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVENTORY -->
+      <div class="page" id="page-inventory">
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Total Items</div><div class="metric-value" id="inv-count">—</div></div>
+          <div class="metric"><div class="metric-label">Low Stock (&lt;5)</div><div class="metric-value mv-danger" id="inv-low">—</div></div>
+          <div class="metric"><div class="metric-label">Inventory Value</div><div class="metric-value mv-gold" id="inv-value">—</div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="pt">Stock Levels</span><button class="btn btn-ghost btn-sm" onclick="loadInventory()">↻ Refresh</button></div>
+          <div style="padding:12px 16px 0;">
+            <div class="sw"><span class="si">⌕</span><input type="text" id="inv-search" placeholder="Search items..." oninput="filterInv()"></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table><thead><tr><th>Item</th><th>Type</th><th>UOM</th><th style="text-align:right">Stock</th><th style="text-align:right">Landed Cost</th><th style="text-align:right">Sell Price</th></tr></thead>
+            <tbody id="inv-tbody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody></table>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="panel panel-last">
+            <div class="ph"><span class="pt">Receive Stock</span></div>
+            <div class="pb">
+              <label>Item</label>
+              <select id="inv-mode" onchange="toggleInvMode()"><option value="existing">Existing Item</option><option value="new">New Item</option></select>
+              <div id="inv-exist">
+                <label>Select Item</label>
+                <select id="inv-item-sel"><option>Loading...</option></select>
+              </div>
+              <div id="inv-new" style="display:none;">
+                <label>Item Name</label><input type="text" id="inv-new-name" placeholder="e.g. Blackout Lining">
+                <div class="row">
+                  <div><label>Type</label><select id="inv-new-type"><option>Material</option><option>Product</option><option>Service</option></select></div>
+                  <div><label>Unit</label><select id="inv-new-uom"><option>Meters</option><option>Pieces</option><option>Flat Rate</option></select></div>
+                </div>
+              </div>
+              <div class="row">
+                <div><label>Quantity</label><input type="number" id="inv-qty" value="1" min="0.01" step="0.5" oninput="calcLC()"></div>
+                <div><label>Purchase Price</label><input type="number" id="inv-purchase" value="0" min="0" oninput="calcLC()"></div>
+              </div>
+              <div class="row">
+                <div><label>Freight Cost</label><input type="number" id="inv-freight" value="0" min="0" oninput="calcLC()"></div>
+                <div><label>Payment</label><select id="inv-pay"><option>On Credit</option><option>Paid</option></select></div>
+              </div>
+              <div class="lc-display"><span class="lc-label">Landed Cost / Unit</span><span class="mono text-gold" id="lc-val">0.00</span></div>
+              <button class="btn btn-primary btn-full" onclick="receiveStock()">Receive Stock</button>
+            </div>
+          </div>
+          <div class="panel panel-last">
+            <div class="ph"><span class="pt">Suppliers</span></div>
+            <div class="pb">
+              <div id="sup-list" style="margin-bottom:14px;"></div>
+              <hr class="divider" style="margin:0 0 14px;">
+              <label>New Supplier Name</label><input type="text" id="sup-name" placeholder="Supplier name">
+              <label>Phone</label><input type="text" id="sup-phone" placeholder="+250 ...">
+              <button class="btn btn-ghost btn-full" onclick="addSupplier()">Add Supplier</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FINANCE -->
+      <div class="page" id="page-finance">
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value mv-gold" id="fin-rev">—</div></div>
+          <div class="metric"><div class="metric-label">COGS</div><div class="metric-value" id="fin-cogs">—</div></div>
+          <div class="metric"><div class="metric-label">Gross Profit</div><div class="metric-value mv-success" id="fin-gross">—</div></div>
+          <div class="metric"><div class="metric-label">Expenses</div><div class="metric-value mv-danger" id="fin-exp">—</div></div>
+          <div class="metric"><div class="metric-label">Net Profit</div><div class="metric-value" id="fin-net">—</div></div>
+        </div>
+        <div class="two-col">
+          <div class="panel panel-last">
+            <div class="ph"><span class="pt">Accounts Payable</span></div>
+            <div style="overflow-x:auto;"><table><thead><tr><th>Supplier</th><th style="text-align:right">Amount Owed</th></tr></thead><tbody id="ap-tbody"><tr><td colspan="2" class="loading">Loading...</td></tr></tbody></table></div>
+          </div>
+          <div class="panel panel-last">
+            <div class="ph"><span class="pt">Log Expense</span></div>
+            <div class="pb">
+              <label>Description</label><input type="text" id="exp-desc" placeholder="e.g. Electricity bill">
+              <div class="row">
+                <div><label>Amount</label><input type="number" id="exp-amt" value="0" min="0"></div>
+                <div><label>Category</label><select id="exp-cat"><option>Electricity</option><option>Transport</option><option>Rent</option><option>Salaries</option><option>Supplies</option><option>Other</option></select></div>
+              </div>
+              <button class="btn btn-primary btn-full" onclick="logExpense()">Log Expense</button>
+              <hr class="divider">
+              <div class="pt" style="margin-bottom:10px;">Recent Expenses</div>
+              <div style="overflow-x:auto;"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody id="exp-tbody"></tbody></table></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ORDERS -->
+      <div class="page" id="page-orders">
+        <div class="panel">
+          <div class="ph"><span class="pt">All Orders</span><button class="btn btn-ghost btn-sm" onclick="loadOrders()">↻ Refresh</button></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>Date</th><th>Customer</th><th>Phone</th><th>Status</th><th style="text-align:right">Total</th><th style="text-align:right">Deposit</th><th style="text-align:right">Balance</th></tr></thead><tbody id="orders-tbody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody></table></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let sb,catalog=[],inventoryData=[],suppliers=[];
+const NAVS=['pos','inventory','finance','orders'];
+const TITLES={pos:'Point of Sale',inventory:'Inventory',finance:'Finance',orders:'Orders'};
+
+function saveConfig(){
+  const url=document.getElementById('cfg-url').value.trim();
+  const key=document.getElementById('cfg-key').value.trim();
+  if(!url||!key)return toast('Enter URL and key','error');
+  localStorage.setItem('sb_url',url);localStorage.setItem('sb_key',key);
+  boot(url,key);
+}
+function boot(url,key){
+  sb=supabase.createClient(url,key);
+  document.getElementById('cfg').style.display='none';
+  const a=document.getElementById('app');a.style.display='flex';a.style.flex='1';
+  document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  loadAll();
+}
+function loadAll(){loadCatalog();loadInventory();loadFinance();loadOrders();loadSuppliers();}
+
+function nav(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.ni')[NAVS.indexOf(page)].classList.add('active');
+  document.getElementById('page-title').textContent=TITLES[page];
+}
+
+// POS
+async function loadCatalog(){
+  const{data}=await sb.from('catalog').select('item_id,name,uom,default_sell_price,current_landed_cost').order('name');
+  catalog=data||[];
+  const s=document.getElementById('pos-item');
+  s.innerHTML=catalog.length?catalog.map(c=>`<option value="${c.item_id}" data-price="${c.default_sell_price}">${c.name} (${c.uom})</option>`):'<option>No items yet</option>';
+  if(catalog.length)posItemChange();
+  const si=document.getElementById('inv-item-sel');
+  si.innerHTML=catalog.map(c=>`<option value="${c.item_id}">${c.name} (${c.uom})</option>`).join('');
+}
+function posItemChange(){
+  const s=document.getElementById('pos-item');
+  document.getElementById('pos-price').value=s.options[s.selectedIndex]?.dataset.price||0;
+}
+function addToCart(){
+  const itemId=document.getElementById('pos-item').value;
+  const item=catalog.find(c=>c.item_id===itemId);if(!item)return;
+  const qty=parseFloat(document.getElementById('pos-qty').value);
+  const price=parseFloat(document.getElementById('pos-price').value);
+  if(!qty||qty<=0)return toast('Enter valid quantity','error');
+  if(!price||price<=0)return toast('Enter valid price','error');
+  const ex=window._cart.find(l=>l.item_id===itemId&&l.unit_price===price);
+  if(ex)ex.quantity+=qty;else window._cart.push({item_id:itemId,name:item.name,uom:item.uom,quantity:qty,unit_price:price});
+  renderCart();
+}
+window._cart=[];
+function clearCart(){window._cart=[];renderCart();}
+function renderCart(){
+  const lines=document.getElementById('cart-lines');
+  const empty=document.getElementById('cart-empty');
+  const summary=document.getElementById('cart-summary');
+  if(!window._cart.length){lines.innerHTML='';empty.style.display='block';summary.style.display='none';return;}
+  empty.style.display='none';summary.style.display='block';
+  lines.innerHTML=window._cart.map((l,i)=>`
+    <div class="cart-line">
+      <div style="flex:1"><div style="font-size:13px;color:var(--cream)">${l.name}</div><div class="mono text-muted" style="font-size:11px;">${l.quantity} ${l.uom} × ${fmt(l.unit_price)}</div></div>
+      <div class="mono" style="color:var(--cream-dim);margin-right:8px;">${fmt(l.quantity*l.unit_price)}</div>
+      <button class="btn btn-danger btn-sm" onclick="rmCart(${i})">×</button>
+    </div>`).join('');
+  const total=window._cart.reduce((s,l)=>s+l.quantity*l.unit_price,0);
+  const dep=parseFloat(document.getElementById('pos-deposit').value)||0;
+  document.getElementById('cart-total').textContent=fmt(total);
+  document.getElementById('cart-balance').textContent=fmt(total-dep);
+}
+function rmCart(i){window._cart.splice(i,1);renderCart();}
+async function submitOrder(){
+  const cname=document.getElementById('pos-cname').value.trim();
+  if(!cname)return toast('Customer name required','error');
+  if(!window._cart.length)return toast('Cart is empty','error');
+  const total=window._cart.reduce((s,l)=>s+l.quantity*l.unit_price,0);
+  const dep=parseFloat(document.getElementById('pos-deposit').value)||0;
+  const ids=window._cart.map(l=>l.item_id);
+  const{data:catData}=await sb.from('catalog').select('item_id,current_landed_cost').in('item_id',ids);
+  const cm=Object.fromEntries((catData||[]).map(c=>[c.item_id,c.current_landed_cost]));
+  const{data:order,error}=await sb.from('sales_orders').insert({customer_name:cname,customer_phone:document.getElementById('pos-cphone').value,total_amount:total,deposit_paid:dep,status:'Pending'}).select().single();
+  if(error)return toast('Order failed: '+error.message,'error');
+  for(const l of window._cart){
+    const cogs=(cm[l.item_id]||0)*l.quantity;
+    await sb.from('order_lines').insert({order_id:order.order_id,item_id:l.item_id,quantity:l.quantity,unit_price:l.unit_price,line_cogs:cogs});
+    await sb.from('inventory_ledger').insert({item_id:l.item_id,transaction_type:'SALE',quantity_change:-l.quantity,unit_cost:cm[l.item_id]||0});
+  }
+  toast(`Order placed — Balance: ${fmt(total-dep)}`,'success');
+  window._cart=[];renderCart();
+  document.getElementById('pos-cname').value='';
+  document.getElementById('pos-cphone').value='';
+  document.getElementById('pos-deposit').value='0';
+  loadInventory();loadOrders();
+}
+
+// INVENTORY
+async function loadInventory(){
+  const[{data:cat},{data:led}]=await Promise.all([
+    sb.from('catalog').select('item_id,name,type,uom,current_landed_cost,default_sell_price').order('name'),
+    sb.from('inventory_ledger').select('item_id,quantity_change')
+  ]);
+  const t={};(led||[]).forEach(r=>{t[r.item_id]=(t[r.item_id]||0)+r.quantity_change;});
+  inventoryData=(cat||[]).map(c=>({...c,stock:Math.max(parseFloat(((t[c.item_id]||0)).toFixed(3)),0)}));
+  renderInvTable(inventoryData);
+  document.getElementById('inv-count').textContent=inventoryData.length;
+  document.getElementById('inv-low').textContent=inventoryData.filter(c=>c.stock<5).length;
+  document.getElementById('inv-value').textContent=fmt(inventoryData.reduce((s,c)=>s+c.stock*c.current_landed_cost,0));
+  loadCatalog();
+}
+function renderInvTable(data){
+  const tb=document.getElementById('inv-tbody');
+  if(!data.length){tb.innerHTML='<tr><td colspan="6" class="loading">No items yet</td></tr>';return;}
+  tb.innerHTML=data.map(c=>`<tr>
+    <td style="color:var(--cream);font-weight:500">${c.name}</td>
+    <td><span class="badge b-type">${c.type}</span></td>
+    <td class="mono text-muted">${c.uom}</td>
+    <td class="mono" style="text-align:right;color:${c.stock<5?'var(--danger)':'var(--cream)'}">${c.stock}</td>
+    <td class="mono" style="text-align:right">${fmt(c.current_landed_cost)}</td>
+    <td class="mono text-gold" style="text-align:right">${fmt(c.default_sell_price)}</td>
+  </tr>`).join('');
+}
+function filterInv(){const q=document.getElementById('inv-search').value.toLowerCase();renderInvTable(q?inventoryData.filter(c=>c.name.toLowerCase().includes(q)):inventoryData);}
+function toggleInvMode(){const m=document.getElementById('inv-mode').value;document.getElementById('inv-exist').style.display=m==='existing'?'block':'none';document.getElementById('inv-new').style.display=m==='new'?'block':'none';}
+function calcLC(){const q=parseFloat(document.getElementById('inv-qty').value)||1;const p=parseFloat(document.getElementById('inv-purchase').value)||0;const f=parseFloat(document.getElementById('inv-freight').value)||0;document.getElementById('lc-val').textContent=fmt((p+f)/q);}
+async function receiveStock(){
+  const mode=document.getElementById('inv-mode').value;
+  const qty=parseFloat(document.getElementById('inv-qty').value);
+  const purchase=parseFloat(document.getElementById('inv-purchase').value)||0;
+  const freight=parseFloat(document.getElementById('inv-freight').value)||0;
+  const lc=(purchase+freight)/qty;
+  const pay=document.getElementById('inv-pay').value;
+  let item_id;
+  if(mode==='existing'){
+    item_id=document.getElementById('inv-item-sel').value;
+    const[{data:cat},{data:led}]=await Promise.all([
+      sb.from('catalog').select('current_landed_cost').eq('item_id',item_id).single(),
+      sb.from('inventory_ledger').select('quantity_change').eq('item_id',item_id)
+    ]);
+    const oq=Math.max((led||[]).reduce((s,r)=>s+r.quantity_change,0),0);
+    const oc=cat?.current_landed_cost||0;
+    await sb.from('catalog').update({current_landed_cost:+((oq*oc+qty*lc)/(oq+qty)).toFixed(2)}).eq('item_id',item_id);
+  }else{
+    const name=document.getElementById('inv-new-name').value.trim();
+    if(!name)return toast('Item name required','error');
+    const{data:ni}=await sb.from('catalog').insert({name,type:document.getElementById('inv-new-type').value,uom:document.getElementById('inv-new-uom').value,current_landed_cost:+lc.toFixed(2),default_sell_price:+(lc*1.3).toFixed(2)}).select().single();
+    item_id=ni.item_id;
+  }
+  await sb.from('inventory_ledger').insert({item_id,transaction_type:'INWARD',quantity_change:qty,unit_cost:+lc.toFixed(2)});
+  await sb.from('purchase_invoices').insert({item_id,quantity:qty,purchase_price:purchase,freight_cost:freight,status:pay});
+  toast('Stock received','success');loadInventory();
+}
+
+// SUPPLIERS
+async function loadSuppliers(){
+  const{data}=await sb.from('suppliers').select('supplier_id,name,phone').order('name');
+  suppliers=data||[];
+  document.getElementById('sup-list').innerHTML=suppliers.length?suppliers.map(s=>`
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div><div style="font-size:13px">${s.name}</div><div class="mono text-muted" style="font-size:11px">${s.phone||'—'}</div></div>
+    </div>`).join(''):'<div class="text-muted" style="font-size:12px">No suppliers yet</div>';
+}
+async function addSupplier(){
+  const name=document.getElementById('sup-name').value.trim();
+  if(!name)return toast('Name required','error');
+  await sb.from('suppliers').insert({name,phone:document.getElementById('sup-phone').value});
+  document.getElementById('sup-name').value='';document.getElementById('sup-phone').value='';
+  toast('Supplier added','success');loadSuppliers();
+}
+
+// FINANCE
+async function loadFinance(){
+  const[{data:orders},{data:lines},{data:exps},{data:inv}]=await Promise.all([
+    sb.from('sales_orders').select('total_amount'),
+    sb.from('order_lines').select('line_cogs'),
+    sb.from('expenses').select('amount,description,category,expense_date').order('expense_date',{ascending:false}).limit(20),
+    sb.from('purchase_invoices').select('landed_cost,suppliers(name)').eq('status','On Credit')
+  ]);
+  const rev=(orders||[]).reduce((s,o)=>s+o.total_amount,0);
+  const cogs=(lines||[]).reduce((s,l)=>s+l.line_cogs,0);
+  const expTotal=(exps||[]).reduce((s,e)=>s+e.amount,0);
+  const net=rev-cogs-expTotal;
+  document.getElementById('fin-rev').textContent=fmt(rev);
+  document.getElementById('fin-cogs').textContent=fmt(cogs);
+  document.getElementById('fin-gross').textContent=fmt(rev-cogs);
+  document.getElementById('fin-exp').textContent=fmt(expTotal);
+  const ne=document.getElementById('fin-net');ne.textContent=fmt(net);ne.className='metric-value '+(net>=0?'mv-success':'mv-danger');
+  const ap={};(inv||[]).forEach(i=>{const n=i.suppliers?.name||'Unknown';ap[n]=(ap[n]||0)+(i.landed_cost||0);});
+  document.getElementById('ap-tbody').innerHTML=Object.keys(ap).length?Object.entries(ap).map(([n,a])=>`<tr><td>${n}</td><td class="mono text-danger" style="text-align:right">${fmt(a)}</td></tr>`).join(''):`<tr><td colspan="2" style="text-align:center;color:var(--success);padding:20px">No outstanding payables</td></tr>`;
+  document.getElementById('exp-tbody').innerHTML=(exps||[]).map(e=>`<tr><td class="mono text-muted" style="font-size:11px">${e.expense_date}</td><td><span class="badge b-type">${e.category}</span></td><td>${e.description}</td><td class="mono" style="text-align:right">${fmt(e.amount)}</td></tr>`).join('');
+}
+async function logExpense(){
+  const desc=document.getElementById('exp-desc').value.trim();
+  const amt=parseFloat(document.getElementById('exp-amt').value);
+  if(!desc||!amt)return toast('Fill description and amount','error');
+  await sb.from('expenses').insert({description:desc,amount:amt,category:document.getElementById('exp-cat').value});
+  document.getElementById('exp-desc').value='';document.getElementById('exp-amt').value='0';
+  toast('Expense logged','success');loadFinance();
+}
+
+// ORDERS
+async function loadOrders(){
+  const{data}=await sb.from('sales_orders').select('*').order('created_at',{ascending:false}).limit(50);
+  const tb=document.getElementById('orders-tbody');
+  if(!data?.length){tb.innerHTML='<tr><td colspan="7" class="loading">No orders yet</td></tr>';return;}
+  tb.innerHTML=data.map(o=>`<tr>
+    <td class="mono text-muted" style="font-size:11px">${new Date(o.created_at).toLocaleDateString('en-GB')}</td>
+    <td style="color:var(--cream)">${o.customer_name}</td>
+    <td class="mono text-muted">${o.customer_phone||'—'}</td>
+    <td><span class="badge b-pend">${o.status}</span></td>
+    <td class="mono text-gold" style="text-align:right">${fmt(o.total_amount)}</td>
+    <td class="mono" style="text-align:right">${fmt(o.deposit_paid)}</td>
+    <td class="mono ${o.balance_due>0?'text-danger':'text-success'}" style="text-align:right">${fmt(o.balance_due)}</td>
+  </tr>`).join('');
+}
+
+function fmt(n){return new Intl.NumberFormat('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);}
+let _tt;
+function toast(msg,type='success'){const e=document.getElementById('toast');e.textContent=msg;e.className='show '+type;clearTimeout(_tt);_tt=setTimeout(()=>{e.className='';},3000);}
+
+window.addEventListener('load',()=>{
+  const url=localStorage.getItem('sb_url'),key=localStorage.getItem('sb_key');
+  if(url&&key)boot(url,key);
+  else document.getElementById('cfg').style.display='flex';
+});
+</script>
+</body>
+</html>
