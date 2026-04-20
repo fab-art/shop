@@ -1,11 +1,13 @@
 import streamlit as st
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils import get_sb
+import os
+from supabase import create_client
+
+@st.cache_resource
+def get_sb():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 st.set_page_config(page_title="POS", page_icon="🛒", layout="wide")
 sb = get_sb()
-
 st.title("🛒 Point of Sale")
 
 catalog = sb.table("catalog").select("item_id,name,uom,default_sell_price").execute().data
@@ -25,11 +27,8 @@ with col1:
         price = st.number_input("Unit Price", min_value=0.0, value=float(item["default_sell_price"]))
         if st.button("➕ Add to Cart"):
             st.session_state.cart.append({
-                "item_id": item["item_id"],
-                "name": item["name"],
-                "uom": item["uom"],
-                "quantity": qty,
-                "unit_price": price
+                "item_id": item["item_id"], "name": item["name"],
+                "uom": item["uom"], "quantity": qty, "unit_price": price
             })
             st.rerun()
     else:
@@ -59,36 +58,25 @@ with col2:
                 st.error("Customer name required.")
             else:
                 with st.spinner("Submitting order..."):
-                    # Fetch landed costs
                     item_ids = [l["item_id"] for l in st.session_state.cart]
                     cat_res = sb.table("catalog").select("item_id,current_landed_cost").in_("item_id", item_ids).execute()
                     cost_map = {r["item_id"]: r["current_landed_cost"] for r in cat_res.data}
 
-                    # Insert order
                     order = sb.table("sales_orders").insert({
-                        "customer_name": cname,
-                        "customer_phone": cphone,
-                        "total_amount": total,
-                        "deposit_paid": deposit,
-                        "status": "Pending"
+                        "customer_name": cname, "customer_phone": cphone,
+                        "total_amount": total, "deposit_paid": deposit, "status": "Pending"
                     }).execute()
                     order_id = order.data[0]["order_id"]
 
-                    # Insert lines + ledger
                     for line in st.session_state.cart:
                         cogs = cost_map.get(line["item_id"], 0) * line["quantity"]
                         sb.table("order_lines").insert({
-                            "order_id": order_id,
-                            "item_id": line["item_id"],
-                            "quantity": line["quantity"],
-                            "unit_price": line["unit_price"],
-                            "line_cogs": cogs
+                            "order_id": order_id, "item_id": line["item_id"],
+                            "quantity": line["quantity"], "unit_price": line["unit_price"], "line_cogs": cogs
                         }).execute()
                         sb.table("inventory_ledger").insert({
-                            "item_id": line["item_id"],
-                            "transaction_type": "SALE",
-                            "quantity_change": -line["quantity"],
-                            "unit_cost": cost_map.get(line["item_id"], 0)
+                            "item_id": line["item_id"], "transaction_type": "SALE",
+                            "quantity_change": -line["quantity"], "unit_cost": cost_map.get(line["item_id"], 0)
                         }).execute()
 
                     st.success(f"Order placed! ID: `{order_id}`")
