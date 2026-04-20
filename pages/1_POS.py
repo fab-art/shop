@@ -1,6 +1,7 @@
 import streamlit as st
 
 from app.core import require_supabase, init_session_state, require_auth, safe_float
+from app.core import get_supabase, init_session_state, require_auth, safe_float
 from app.ui import inject_design_system
 
 st.set_page_config(page_title="POS", page_icon="🛒", layout="wide")
@@ -8,6 +9,7 @@ inject_design_system()
 init_session_state()
 require_auth()
 sb = require_supabase()
+sb = get_supabase()
 
 st.title("🛒 Point of Sale")
 

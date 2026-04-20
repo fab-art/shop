@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from app.core import require_supabase, init_session_state, log_audit, require_auth
+from app.core import get_supabase, init_session_state, log_audit, require_auth
 from app.ui import inject_design_system
 
 st.set_page_config(page_title="Orders", page_icon="📋", layout="wide")
@@ -9,6 +10,7 @@ inject_design_system()
 init_session_state()
 require_auth()
 sb = require_supabase()
+sb = get_supabase()
 
 st.title("📋 Orders")
 
