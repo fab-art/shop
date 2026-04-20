@@ -1,23 +1,30 @@
 import streamlit as st
 import pandas as pd
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils import get_sb, load_inventory
+from supabase import create_client
+
+@st.cache_resource
+def get_sb():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 st.set_page_config(page_title="Inventory", page_icon="📦", layout="wide")
 sb = get_sb()
-
 st.title("📦 Inventory & Inwarding")
 
-inv = load_inventory(sb)
-df = pd.DataFrame(inv) if inv else pd.DataFrame()
+catalog = sb.table("catalog").select("item_id,name,type,uom,current_landed_cost,default_sell_price").execute().data
+ledger = sb.table("inventory_ledger").select("item_id,quantity_change").execute().data
+totals = {}
+for r in ledger:
+    totals[r["item_id"]] = totals.get(r["item_id"], 0) + r["quantity_change"]
+for c in catalog:
+    c["stock_on_hand"] = round(totals.get(c["item_id"], 0), 3)
+df = pd.DataFrame(catalog) if catalog else pd.DataFrame()
 
 if not df.empty:
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Items", len(df))
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Items", len(df))
     low = df[df["stock_on_hand"] < 5]
-    col2.metric("Low Stock", len(low), delta=f"-{len(low)}" if len(low) else None, delta_color="inverse")
-    col3.metric("Inventory Value", f"{(df['stock_on_hand'] * df['current_landed_cost']).sum():,.2f}")
+    c2.metric("Low Stock", len(low), delta=f"-{len(low)}" if len(low) else None, delta_color="inverse")
+    c3.metric("Inventory Value", f"{(df['stock_on_hand'] * df['current_landed_cost']).sum():,.2f}")
     st.divider()
     search = st.text_input("🔍 Search")
     display = df if not search else df[df["name"].str.contains(search, case=False)]
@@ -64,39 +71,26 @@ st.info(f"Landed Cost per unit: **{lc:,.2f}**")
 
 if st.button("✅ Receive Stock", type="primary"):
     with st.spinner("Saving..."):
-        landed_cost_per_unit = lc
-
         if not item_id:
             res = sb.table("catalog").insert({
-                "name": item_name,
-                "type": item_type,
-                "uom": item_uom,
-                "current_landed_cost": round(landed_cost_per_unit, 2),
-                "default_sell_price": round(landed_cost_per_unit * 1.3, 2)
+                "name": item_name, "type": item_type, "uom": item_uom,
+                "current_landed_cost": round(lc, 2), "default_sell_price": round(lc * 1.3, 2)
             }).execute()
             item_id = res.data[0]["item_id"]
         else:
             cat = sb.table("catalog").select("current_landed_cost").eq("item_id", item_id).execute()
-            ledger = sb.table("inventory_ledger").select("quantity_change").eq("item_id", item_id).execute()
+            led = sb.table("inventory_ledger").select("quantity_change").eq("item_id", item_id).execute()
             old_cost = cat.data[0]["current_landed_cost"] if cat.data else 0
-            old_qty = max(sum(r["quantity_change"] for r in ledger.data) if ledger.data else 0, 0)
-            new_avg = ((old_qty * old_cost) + (qty * landed_cost_per_unit)) / (old_qty + qty)
+            old_qty = max(sum(r["quantity_change"] for r in led.data) if led.data else 0, 0)
+            new_avg = ((old_qty * old_cost) + (qty * lc)) / (old_qty + qty)
             sb.table("catalog").update({"current_landed_cost": round(new_avg, 2)}).eq("item_id", item_id).execute()
 
         sb.table("inventory_ledger").insert({
-            "item_id": item_id,
-            "transaction_type": "INWARD",
-            "quantity_change": qty,
-            "unit_cost": round(landed_cost_per_unit, 2)
+            "item_id": item_id, "transaction_type": "INWARD",
+            "quantity_change": qty, "unit_cost": round(lc, 2)
         }).execute()
 
-        invoice = {
-            "item_id": item_id,
-            "quantity": qty,
-            "purchase_price": purchase_price,
-            "freight_cost": freight,
-            "status": pay_status
-        }
+        invoice = {"item_id": item_id, "quantity": qty, "purchase_price": purchase_price, "freight_cost": freight, "status": pay_status}
         if supplier_map.get(sup_name):
             invoice["supplier_id"] = supplier_map[sup_name]
         sb.table("purchase_invoices").insert(invoice).execute()
