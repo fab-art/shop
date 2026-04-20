@@ -1,120 +1,93 @@
-# Curtain Shop ERP
+# Curtain ERP (Streamlit + Supabase)
 
-A complete ERP system for curtain shops built with FastAPI (backend), Streamlit (frontend), and Supabase (database).
+Production-ready ERP + POS system built with:
+
+- **Frontend:** Streamlit multipage app
+- **Database/Auth/Security:** Supabase (Postgres + Auth + RLS)
+- **Language:** Python
+
+## App Structure
+
+```txt
+.
+├── main.py
+├── pages/
+│   ├── 1_POS.py
+│   ├── 2_Inventory.py
+│   ├── 3_Finance.py
+│   ├── 4_Orders.py
+│   └── 5_Admin.py
+├── app/
+│   ├── core.py
+│   └── ui.py
+├── schema.sql
+└── requirements.txt
+```
 
 ## Features
 
-- **Point of Sale (POS)**: Create sales, manage cart, track orders
-- **Inventory Management**: Real-time stock tracking, purchase order receiving, stock adjustments
-- **Finance & Reports**: Sales and purchase reports with analytics
-- **Customer Tracking**: Public order tracking endpoint
-- **Landed Cost Calculation**: Automatic allocation of shipping and other costs to inventory
+### Authentication
+- Login / Signup / Logout via Supabase Auth
+- Profile bootstrapping in `profiles` table
+- Role-based access (`admin`, `cashier`)
 
-## File Structure
-
-```
-project/
-├── schema.sql              ← Run on Supabase
-├── backend/
-│   ├── main.py             ← FastAPI app
-│   ├── requirements.txt
-│   └── render.yaml
-└── frontend/
-    ├── Home.py             ← Streamlit entry
-    ├── requirements.txt
-    ├── .streamlit/
-    │   └── secrets.toml.example
-    └── pages/
-        ├── 1_POS.py
-        ├── 2_Inventory.py
-        └── 3_Finance.py
-```
-
-## Deployment Guide
-
-### Step 1: Supabase (Database)
-
-1. Create free account at [supabase.com](https://supabase.com)
-2. New project → SQL Editor → paste `schema.sql` → Run
-3. Copy your **Project URL** and **anon key** from Settings > API
-
-### Step 2: Render (Backend API)
-
-1. Push `backend/` folder to a GitHub repo
-2. New Web Service on [render.com](https://render.com) → connect repo
-3. Set environment variables:
-   - `SUPABASE_URL` = your Supabase URL
-   - `SUPABASE_KEY` = your Supabase anon key
-4. Deploy. Copy your Render URL (e.g. `https://curtain-shop-api.onrender.com`)
-
-### Step 3: Streamlit Cloud (Frontend)
-
-1. Push `frontend/` folder to a GitHub repo (can be same repo, different folder)
-2. New app on [share.streamlit.io](https://share.streamlit.io) → set main file: `Home.py`
-3. Add secrets:
-   ```toml
-   SUPABASE_URL = "https://your-project.supabase.co"
-   SUPABASE_KEY = "your-anon-key-here"
-   API_URL = "https://curtain-shop-api.onrender.com"
-   ```
-4. Deploy.
-
-## Notes
-
-- **Cold start on Render**: First request of the day takes ~30–50 seconds. This is expected.
-- **Current Inventory View**: Auto-calculates stock from the ledger table.
-- **Landed Cost**: Uses moving average when receiving additional stock.
-- **Customer Tracking URL**: `https://your-render-url/track/{order_id}`
-
-## API Endpoints
-
-### Products
-- `GET /products` - List all products
-- `POST /products` - Create product
-- `PUT /products/{id}` - Update product
-- `DELETE /products/{id}` - Delete product
-
-### Customers
-- `GET /customers` - List all customers
-- `POST /customers` - Create customer
-
-### Suppliers
-- `GET /suppliers` - List all suppliers
-- `POST /suppliers` - Create supplier
+### POS
+- Product select + auto price
+- Decimal quantity support
+- Cart in session state
+- Checkout creates:
+  - `sales_orders`
+  - `order_lines`
+  - inventory ledger `SALE` entries
 
 ### Inventory
-- `GET /inventory` - Get current inventory levels
-- `POST /inventory/adjust` - Manual stock adjustment
+- Live stock computed from ledger sum
+- KPIs (item count, low stock, value)
+- Stock inward with landed-cost weighted averaging
+- Admin-only adjustment entries (`ADJUSTMENT`) with reason
 
-### Sales Orders
-- `GET /sales-orders` - List sales orders
-- `POST /sales-orders` - Create new sale
-- `PATCH /sales-orders/{id}/status` - Update order status
-- `GET /track/{order_id}` - Public order tracking
+### Finance (Admin)
+- Revenue, COGS, Gross Profit, Expenses, Net Profit
+- Accounts payable from unpaid purchase invoices
+- Expense logging
 
-### Purchase Orders
-- `GET /purchase-orders` - List purchase orders
-- `POST /purchase-orders` - Create purchase order
-- `POST /purchase-orders/{id}/receive` - Receive order into inventory
+### Orders
+- Sales order list + order lines (view-only)
+- Admin status updates with cancellation inventory reversal
 
-### Dashboard
-- `GET /dashboard/stats` - Get summary statistics
+### Admin
+- Edit catalog
+- Edit purchase invoices (recalculate landed cost)
+- Edit/delete expenses
+- All updates/deletes logged to `audit_logs`
 
-## Local Development
+## UI Design
 
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-export SUPABASE_URL="your-url"
-export SUPABASE_KEY="your-key"
-uvicorn main:app --reload
+A custom dark/gold design system is injected via `st.markdown(<style>...</style>, unsafe_allow_html=True)`.
+
+## Setup
+
+1. Create Supabase project.
+2. Run `schema.sql` in Supabase SQL Editor.
+3. Configure Streamlit secrets or env vars:
+
+```toml
+SUPABASE_URL = "https://<project>.supabase.co"
+SUPABASE_KEY = "<anon-key>"
 ```
 
-### Frontend
+4. Install dependencies:
+
 ```bash
-cd frontend
 pip install -r requirements.txt
-# Create .streamlit/secrets.toml with your credentials
-streamlit run Home.py
 ```
+
+5. Run app:
+
+```bash
+streamlit run main.py
+```
+
+## Streamlit Cloud
+
+This system is designed to run on Streamlit Cloud + Supabase Free Tier only.
