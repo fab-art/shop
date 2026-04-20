@@ -5,13 +5,33 @@ import streamlit as st
 from supabase import Client, create_client
 
 
+def _read_secret(name: str) -> str | None:
+    return os.environ.get(name) or st.secrets.get(name)
+
+
 @st.cache_resource
-def get_supabase() -> Client:
-    url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+def get_supabase() -> Client | None:
+    url = _read_secret("SUPABASE_URL")
+    key = _read_secret("SUPABASE_KEY") or _read_secret("SUPABASE_ANON_KEY")
     if not url or not key:
-        raise RuntimeError("Missing SUPABASE_URL or SUPABASE_KEY")
+        return None
     return create_client(url, key)
+
+
+def require_supabase() -> Client:
+    sb = get_supabase()
+    if sb is None:
+        st.error(
+            "Supabase is not configured. Add `SUPABASE_URL` and `SUPABASE_KEY` "
+            "(or `SUPABASE_ANON_KEY`) in Streamlit secrets or environment variables."
+        )
+        st.code(
+            'SUPABASE_URL = "https://<project>.supabase.co"\n'
+            'SUPABASE_KEY = "<anon-key>"',
+            language="toml",
+        )
+        st.stop()
+    return sb
 
 
 def init_session_state() -> None:

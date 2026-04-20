@@ -1,11 +1,13 @@
 import streamlit as st
 
+from app.core import require_supabase, init_session_state, login, logout, refresh_role, signup
 from app.core import get_supabase, init_session_state, login, logout, refresh_role, signup
 from app.ui import inject_design_system
 
 st.set_page_config(page_title="Curtain ERP", page_icon="🪟", layout="wide")
 inject_design_system()
 init_session_state()
+sb = require_supabase()
 sb = get_supabase()
 
 st.title("🪟 Curtain ERP")
