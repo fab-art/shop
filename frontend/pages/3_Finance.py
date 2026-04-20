@@ -1,15 +1,15 @@
 import streamlit as st
 import pandas as pd
-import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils import get_sb
+from supabase import create_client
+
+@st.cache_resource
+def get_sb():
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 st.set_page_config(page_title="Finance", page_icon="📊", layout="wide")
 sb = get_sb()
-
 st.title("📊 Financial Dashboard")
 
-# P&L
 orders = sb.table("sales_orders").select("total_amount").execute().data
 lines = sb.table("order_lines").select("line_cogs").execute().data
 expenses = sb.table("expenses").select("amount").execute().data
